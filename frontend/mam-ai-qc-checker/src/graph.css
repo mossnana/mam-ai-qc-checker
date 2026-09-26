@@ -1,0 +1,28 @@
+.inspection-graph {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 18px 18px;
+  padding: 11px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  overflow: auto;
+}
+
+.graph-node {
+  flex: 0 0 auto;
+  padding: 5px 7px;
+  border: 1px solid #d4dfeb;
+  border-radius: 5px;
+  background: #fbfcfd;
+  color: #52627a;
+  font-size: .64rem;
+  font-weight: 800;
+}
+
+.graph-node.rule { background: #e8f7ef; border-color: #ccebd9; color: var(--mint-deep) }
+.graph-rules { display: flex; flex-wrap: wrap; align-items: center; gap: 5px }
+.graph-arrow { color: #90a0b2; font-size: .85rem }
+
+.library-title { display: flex; align-items: center; justify-content: space-between; gap: 8px }
+.library-title button { border: 0; background: transparent; color: var(--mint-deep); font-size: .68rem; font-weight: 800; white-space: nowrap }

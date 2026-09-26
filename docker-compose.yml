@@ -1,0 +1,95 @@
+services:
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-m", "8222"]
+    ports: ["4222:4222", "8222:8222"]
+    volumes: ["nats-data:/data"]
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: qc
+      POSTGRES_PASSWORD: qc
+      POSTGRES_DB: qc
+    ports: ["5432:5432"]
+    volumes: ["postgres-data:/var/lib/postgresql/data"]
+
+  intake-svc:
+    build: { context: ./backend, args: { SERVICE: intake-svc } }
+    # Named volumes are initialized as root-owned by Docker. Use the same
+    # service identity for the local intake/checker pair; production should
+    # instead provision the object store with a dedicated writable identity.
+    user: "0:0"
+    environment:
+      OBJECT_ROOT: /objects
+      UPLOAD_PUBLIC_BASE_URL: http://localhost:8081
+      EXPOSE_TECHNICAL_ERRORS: "true"
+    ports: ["8081:8081"]
+    volumes: ["object-data:/objects"]
+
+  ruleset-svc:
+    build: { context: ./backend, args: { SERVICE: ruleset-svc } }
+    environment: { NATS_URL: nats://nats:4222, EXPOSE_TECHNICAL_ERRORS: "true" }
+    depends_on: [nats]
+    ports: ["8082:8082"]
+
+  inspection-svc:
+    build: { context: ./backend, args: { SERVICE: inspection-svc } }
+    environment: { NATS_URL: nats://nats:4222, EXPOSE_TECHNICAL_ERRORS: "true" }
+    depends_on: [nats]
+    ports: ["8083:8083"]
+
+  checker-dimension:
+    build: { context: ./backend, args: { SERVICE: checker-dimension } }
+    environment: { NATS_URL: nats://nats:4222 }
+    depends_on: [nats, ruleset-svc]
+
+  checker-filesize:
+    build: { context: ./backend, args: { SERVICE: checker-filesize } }
+    environment: { NATS_URL: nats://nats:4222 }
+    depends_on: [nats, ruleset-svc]
+
+  checker-color:
+    build: { context: ./backend, args: { SERVICE: checker-color } }
+    user: "0:0"
+    environment:
+      NATS_URL: nats://nats:4222
+      OBJECT_ROOT: /objects
+    depends_on: [nats, ruleset-svc, intake-svc]
+    volumes: ["object-data:/objects"]
+
+  checker-ai-visual:
+    build:
+      context: ./backend
+      dockerfile: checker-ai-visual/Dockerfile
+    environment:
+      NATS_URL: nats://nats:4222
+      OBJECT_ROOT: /objects
+      AI_QC_AGENT: ${AI_QC_AGENT:-codex-cli}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_QC_MODEL: ${AI_QC_MODEL:-}
+      AI_QC_TIMEOUT_SEC: ${AI_QC_TIMEOUT_SEC:-90}
+      AI_QC_SETTINGS_ROOT: /settings
+      SETTINGS_ADMIN_TOKEN: ${SETTINGS_ADMIN_TOKEN:-}
+      SETTINGS_ALLOWED_ORIGIN: ${SETTINGS_ALLOWED_ORIGIN:-}
+    depends_on: [nats, ruleset-svc, intake-svc]
+    volumes:
+      - object-data:/objects:ro
+      - ai-settings:/settings
+      - "${CODEX_AUTH_DIR:-/dev/null}:/auth/codex:ro"
+      - "${CLAUDE_AUTH_DIR:-/dev/null}:/auth/claude:ro"
+    ports: ["8084:8084"]
+
+  frontend:
+    build: ./frontend/mam-ai-qc-checker
+    environment:
+      VITE_AI_SETTINGS_API: ${VITE_AI_SETTINGS_API:-http://localhost:8084}
+    depends_on: [ruleset-svc, inspection-svc]
+    ports: ["5173:5173"]
+
+volumes:
+  nats-data:
+  postgres-data:
+  object-data:
+  ai-settings:

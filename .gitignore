@@ -1,0 +1,8 @@
+.DS_Store
+**/node_modules
+**/dist
+**/.env
+**/coverage
+**/*.tsbuildinfo
+frontend/mam-ai-qc-checker/vite.config.js
+frontend/mam-ai-qc-checker/vite.config.d.ts
