@@ -56,6 +56,16 @@ func TestNewVisualAgentRejectsUnknownConfiguration(t *testing.T) {
 	}
 }
 
+func TestCurrentRuntimeConfigUsesDeploymentEnvironment(t *testing.T) {
+	t.Setenv("AI_QC_AGENT", "codex-cli")
+	t.Setenv("AI_QC_MODEL", "gpt-6-astra")
+
+	configuration := currentRuntimeConfig()
+	if configuration.Agent != "codex-cli" || configuration.Model != "gpt-6-astra" {
+		t.Fatalf("unexpected runtime configuration: %#v", configuration)
+	}
+}
+
 func TestImageContentEncodesImageAttachment(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "artwork.png")
 	if err := os.WriteFile(path, []byte{'\x89', 'P', 'N', 'G', '\r', '\n', '\x1a', '\n'}, 0o600); err != nil {

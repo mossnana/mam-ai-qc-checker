@@ -45,6 +45,11 @@ type modelFinding struct {
 	Message    string  `json:"message"`
 }
 
+type runtimeConfig struct {
+	Agent string
+	Model string
+}
+
 type visualAgent interface {
 	Run(context.Context, []*message.Message, ...agent.Option) agent.ResponseStream
 	ModelRevision() string
@@ -78,11 +83,10 @@ func (a *ClaudeCodeAPIAgent) SupportsStructuredOutput() bool { return true }
 type CodexCLIAgent struct {
 	systemPrompt string
 	model        string
-	authDir      string
 }
 
 func (a *CodexCLIAgent) Run(ctx context.Context, messages []*message.Message, _ ...agent.Option) agent.ResponseStream {
-	return runCLI(ctx, "codex", a.systemPrompt, agentInputText(messages), a.model, a.authDir, imageAttachments(messages))
+	return runCLI(ctx, "codex", a.systemPrompt, agentInputText(messages), a.model, imageAttachments(messages))
 }
 
 func (a *CodexCLIAgent) ModelRevision() string          { return "codex-cli" }
@@ -91,11 +95,10 @@ func (a *CodexCLIAgent) SupportsStructuredOutput() bool { return false }
 type ClaudeCodeCLIAgent struct {
 	systemPrompt string
 	model        string
-	authDir      string
 }
 
 func (a *ClaudeCodeCLIAgent) Run(ctx context.Context, messages []*message.Message, _ ...agent.Option) agent.ResponseStream {
-	return runCLI(ctx, "claude", a.systemPrompt, agentInputText(messages), a.model, a.authDir, imageAttachments(messages))
+	return runCLI(ctx, "claude", a.systemPrompt, agentInputText(messages), a.model, imageAttachments(messages))
 }
 
 func (a *ClaudeCodeCLIAgent) ModelRevision() string          { return "claude-code-cli" }
@@ -103,13 +106,6 @@ func (a *ClaudeCodeCLIAgent) SupportsStructuredOutput() bool { return false }
 
 func main() {
 	log := platform.Logger(serviceName)
-	settings, err := newSettingsStore(valueOr("AI_QC_SETTINGS_ROOT", "/settings"))
-	if err != nil {
-		log.Error("AI settings unavailable", "error", err)
-		return
-	}
-	runtimeSettings = settings
-	startSettingsServer(log, settings)
 	nc, err := platform.Connect(serviceName)
 	if err != nil {
 		log.Error("nats connection failed", "error", err)
@@ -211,8 +207,6 @@ func failed(result contracts.CheckTaskCompleted, err error, log *slog.Logger) co
 	return result
 }
 
-var runtimeSettings *settingsStore
-
 func runAgent(imagePath, referencePath, brief string) (modelOutput, string, error) {
 	systemPrompt, prompt, err := buildPrompt(referencePath, brief)
 	if err != nil {
@@ -264,23 +258,13 @@ func newVisualAgent(name, systemPrompt string) (visualAgent, error) {
 }
 
 func currentRuntimeConfig() runtimeConfig {
-	if runtimeSettings != nil {
-		config := runtimeSettings.current()
-		if config.Model == "" {
-			config.Model = modelFor(config.Agent)
-		}
-		return config
-	}
 	return runtimeConfig{Agent: configuredAgent(), Model: modelFor(configuredAgent())}
 }
 
 func newVisualAgentWithConfig(configuration runtimeConfig, systemPrompt string) (visualAgent, error) {
 	switch configuration.Agent {
 	case "codex-api":
-		apiKey := configuration.APIKey
-		if apiKey == "" {
-			apiKey = os.Getenv("OPENAI_API_KEY")
-		}
+		apiKey := os.Getenv("OPENAI_API_KEY")
 		if apiKey == "" {
 			return nil, errors.New("OPENAI_API_KEY is required for codex-api")
 		}
@@ -298,10 +282,7 @@ func newVisualAgentWithConfig(configuration runtimeConfig, systemPrompt string) 
 			model: selectedModel,
 		}, nil
 	case "claude-code-api":
-		apiKey := configuration.APIKey
-		if apiKey == "" {
-			apiKey = os.Getenv("ANTHROPIC_API_KEY")
-		}
+		apiKey := os.Getenv("ANTHROPIC_API_KEY")
 		if apiKey == "" {
 			return nil, errors.New("ANTHROPIC_API_KEY is required for claude-code-api")
 		}
@@ -318,22 +299,15 @@ func newVisualAgentWithConfig(configuration runtimeConfig, systemPrompt string) 
 			model: selectedModel,
 		}, nil
 	case "codex-cli":
-		return &CodexCLIAgent{systemPrompt: systemPrompt, model: configuration.Model, authDir: cliAuthDir(configuration.Agent)}, nil
+		return &CodexCLIAgent{systemPrompt: systemPrompt, model: configuration.Model}, nil
 	case "claude-code-cli":
-		return &ClaudeCodeCLIAgent{systemPrompt: systemPrompt, model: configuration.Model, authDir: cliAuthDir(configuration.Agent)}, nil
+		return &ClaudeCodeCLIAgent{systemPrompt: systemPrompt, model: configuration.Model}, nil
 	default:
 		return nil, fmt.Errorf("unsupported AI_QC_AGENT %q; use codex-api, codex-cli, claude-code-api, or claude-code-cli", configuration.Agent)
 	}
 }
 
-func cliAuthDir(agent string) string {
-	if runtimeSettings == nil {
-		return ""
-	}
-	return runtimeSettings.cliAuthDir(agent)
-}
-
-func runCLI(ctx context.Context, cli, systemPrompt, prompt, selectedModel, authDir string, attachments []*message.DataContent) agent.ResponseStream {
+func runCLI(ctx context.Context, cli, systemPrompt, prompt, selectedModel string, attachments []*message.DataContent) agent.ResponseStream {
 	return agent.ResponseStream(func(yield func(*agent.ResponseUpdate, error) bool) {
 		imagePaths, cleanup, err := attachmentFiles(attachments)
 		if err != nil {
@@ -373,14 +347,6 @@ func runCLI(ctx context.Context, cli, systemPrompt, prompt, selectedModel, authD
 		}
 
 		command.Env = append(os.Environ(), "NO_COLOR=1")
-		if authDir != "" {
-			if cli == "codex" {
-				command.Env = append(command.Env, "CODEX_HOME="+authDir)
-			}
-			if cli == "claude" {
-				command.Env = append(command.Env, "CLAUDE_CONFIG_DIR="+authDir)
-			}
-		}
 		stdout, err := command.Output()
 		if err != nil {
 			var exitError *exec.ExitError

@@ -14,8 +14,10 @@ cp .env.example .env
 docker compose up --build
 ```
 
-`AI_QC_AGENT` selects exactly one implementation. API agents use a provider API
-key; CLI agents use the matching host sign-in directory, mounted read-only.
+`AI_QC_AGENT` selects exactly one implementation. All configuration comes from
+the deployment environment; the browser cannot change the active agent or
+credentials. API agents use a provider API key; CLI agents use the matching
+host sign-in directory, mounted read-only.
 
 | Value | Implementation | Required configuration |
 | --- | --- | --- |
@@ -28,32 +30,18 @@ Set `AI_QC_MODEL` to override the selected agent's model. API agents otherwise
 use `gpt-4.1-mini` and `claude-sonnet-4-5`; CLI agents preserve their own
 configured default.
 
-### Configure the AI connection in the app
+### Configure a Codex CLI mount
 
-The **AI connection** button lets an authorized operator change the active
-agent without rebuilding the stack. For an API agent, paste the provider key;
-for a CLI agent, upload a ZIP of the *contents* of the CLI profile folder
-(`.codex` or `.claude`). The checker extracts it into its private persistent
-volume and runs the selected CLI with that directory as its profile. The key is
-never returned to the browser or saved in browser storage.
+For `codex-cli`, set `CODEX_AUTH_DIR` to a host directory containing the
+file-based Codex login profile, including `auth.json`. The Compose service mounts
+that directory read-only at `/auth/codex`, then copies it only into the
+container's disposable profile before starting the checker. The browser cannot
+read or replace these credentials.
 
-The settings API is on port `8084`. Before putting it on a real host, set both
-of these deployment variables and expose the API only through your authenticated
-application/proxy:
-
-```bash
-SETTINGS_ADMIN_TOKEN=use-a-long-random-secret
-SETTINGS_ALLOWED_ORIGIN=https://qc.example.com
-# The browser must be able to reach the settings API through this URL.
-VITE_AI_SETTINGS_API=https://qc.example.com/ai-settings
-```
-
-Operators enter the settings token in the dialog; it is retained only for the
-current browser session. The checker stores credentials with owner-only file
-permissions in the `ai-settings` Docker volume. Treat that volume as a secret,
-back it up accordingly, and do not expose port 8084 directly to the internet.
-The current MVP has no tenant identity model, so this is a deployment-wide
-connection—not a per-user or per-project credential store.
+On a headless customer host, create a file-backed profile with `codex login`
+or `codex login --device-auth`, then set `CODEX_AUTH_DIR` to that profile. If
+the host normally stores Codex credentials in a system keychain, create a
+file-based profile first; a directory mount cannot carry OS keychain entries.
 
 Open [http://localhost:5173](http://localhost:5173), select an image, add one
 or more rules from the registry, and choose **อัปโหลดและตรวจ**. The dev intake

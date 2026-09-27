@@ -70,21 +70,14 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AI_QC_MODEL: ${AI_QC_MODEL:-}
       AI_QC_TIMEOUT_SEC: ${AI_QC_TIMEOUT_SEC:-90}
-      AI_QC_SETTINGS_ROOT: /settings
-      SETTINGS_ADMIN_TOKEN: ${SETTINGS_ADMIN_TOKEN:-}
-      SETTINGS_ALLOWED_ORIGIN: ${SETTINGS_ALLOWED_ORIGIN:-}
     depends_on: [nats, ruleset-svc, intake-svc]
     volumes:
       - object-data:/objects:ro
-      - ai-settings:/settings
       - "${CODEX_AUTH_DIR:-/dev/null}:/auth/codex:ro"
       - "${CLAUDE_AUTH_DIR:-/dev/null}:/auth/claude:ro"
-    ports: ["8084:8084"]
 
   frontend:
     build: ./frontend/mam-ai-qc-checker
-    environment:
-      VITE_AI_SETTINGS_API: ${VITE_AI_SETTINGS_API:-http://localhost:8084}
     depends_on: [ruleset-svc, inspection-svc]
     ports: ["5173:5173"]
 
@@ -92,4 +85,3 @@ volumes:
   nats-data:
   postgres-data:
   object-data:
-  ai-settings:

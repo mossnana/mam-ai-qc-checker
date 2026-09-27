@@ -13,4 +13,13 @@ if [ -d /auth/claude ]; then
   cp -a /auth/claude/. /root/.claude/
 fi
 
+if [ "${AI_QC_AGENT:-codex-cli}" = "codex-cli" ] \
+  && [ ! -f /root/.codex/auth.json ] \
+  && [ -z "${OPENAI_API_KEY:-}" ] \
+  && [ -z "${CODEX_API_KEY:-}" ] \
+  && [ -z "${CODEX_ACCESS_TOKEN:-}" ]; then
+  echo "codex-cli requires CODEX_AUTH_DIR to mount a profile containing auth.json" >&2
+  exit 1
+fi
+
 exec /app/checker-ai-visual
